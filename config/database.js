@@ -1,37 +1,62 @@
-const mysql = require('mysql2');
-require('dotenv').config();
+const express = require('express');
+const router = express.Router();
+const db = require('../database'); // Tu conexión a MySQL
 
-// Verificar que las variables de entorno existan
-if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_NAME) {
-  console.error('❌ Error: Faltan variables de entorno en .env');
-  console.error('Asegúrate de tener: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME');
-  process.exit(1);
-}
+// Ruta para guardar pedido
+router.post('/guardar', async (req, res) => {
+  try {
+    const {
+      customer_name,
+      customer_email,
+      products,
+      total,
+      order_number
+    } = req.body;
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+    console.log('📝 Datos recibidos:', req.body);
+
+    // ✅ GUARDAR EN MYSQL
+    const query = `
+      INSERT INTO orders
+      (order_number, customer_name, customer_email, total, status, created_at)
+      VALUES (?, ?, ?, ?, 'Pendiente', NOW())
+    `;
+
+    const result = await db.query(query, [
+      order_number || `BOX-${Date.now()}`,
+      customer_name,
+      customer_email,
+      parseFloat(total)
+    ]);
+
+    const orderId = result.insertId;
+
+    // ✅ GUARDAR PRODUCTOS DEL PEDIDO
+    if (products && products.length > 0) {
+      for (const item of products) {
+        await db.query(
+            `INSERT INTO order_items (order_id, product_id, quantity, price) 
+                     VALUES (?, ?, ?, ?)`,
+            [orderId, item.id, item.quantity, item.price]
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      message: '✅ Pedido guardado',
+      orderId: orderId,
+      orderNumber: order_number
+    });
+
+  } catch (error) {
+    console.error('❌ Error al guardar:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al guardar pedido',
+      error: error.message
+    });
+  }
 });
 
-// Convertir a promesas para usar async/await
-const database = pool.promise();
-
-// Probar conexión
-(async () => {
-  try {
-    const [rows] = await database.query('SELECT 1');
-    console.log('✅ Conexión a MySQL establecida correctamente');
-    console.log(`📦 Base de datos: ${process.env.DB_NAME}`);
-  } catch (error) {
-    console.error('❌ Error al conectar a MySQL:', error.message);
-    console.error('Verifica que MySQL esté corriendo y las credenciales sean correctas');
-    process.exit(1);
-  }
-})();
-
-module.exports = database;
+module.exports = router;
