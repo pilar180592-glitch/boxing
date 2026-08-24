@@ -3065,134 +3065,445 @@
 
 
     /* ==================================================
-       FINALIZAR PEDIDO
-    ================================================== */
+    /* ==================================================
+   FINALIZAR PEDIDO
+================================================== */
 
     document
         .getElementById("formCliente")
         .addEventListener(
             "submit",
-            function(event) {
+            async function(event) {
 
                 event.preventDefault();
 
+                /*
+                ==============================
+                VALIDAR CARRITO
+                ==============================
+                */
 
-                const cliente = {
+                if (carrito.length === 0) {
 
-                    nombre:
+                    alert(
+                        "El carrito está vacío."
+                    );
+
+                    return;
+
+                }
+
+                /*
+                ==============================
+                OBTENER DATOS DEL CLIENTE
+                ==============================
+                */
+
+                const nombre =
                     document
                         .getElementById("nombre")
-                        .value,
+                        .value
+                        .trim();
 
-                    apellido:
+                const apellido =
                     document
                         .getElementById("apellido")
-                        .value,
+                        .value
+                        .trim();
 
-                    segundoApellido:
+                const segundoApellido =
                     document
                         .getElementById("segundoApellido")
-                        .value,
+                        .value
+                        .trim();
 
-                    correo:
+                const correo =
                     document
                         .getElementById("correo")
-                        .value,
+                        .value
+                        .trim();
 
-                    telefono:
+                const telefono =
                     document
                         .getElementById("telefono")
-                        .value,
+                        .value
+                        .trim();
 
-                    direccion:
+                const direccion =
                     document
                         .getElementById("direccion")
                         .value
+                        .trim();
+
+
+                /*
+                ==============================
+                CALCULAR TOTAL
+                ==============================
+                */
+
+                const total =
+                    carrito.reduce(
+                        (acumulado, producto) => {
+
+                            return acumulado +
+                                (
+                                    Number(producto.precio) *
+                                    Number(producto.cantidad)
+                                );
+
+                        },
+                        0
+                    );
+
+
+                /*
+                ==============================
+                NÚMERO DE PEDIDO
+                ==============================
+                */
+
+                const numeroPedido =
+                    "BOX-" + Date.now();
+
+
+                /*
+                ==============================
+                PREPARAR PRODUCTOS
+                ==============================
+                */
+
+                const products =
+                    carrito.map(producto => ({
+
+                        id:
+                            Number(producto.id),
+
+                        nombre:
+                        producto.nombre,
+
+                        cantidad:
+                            Number(producto.cantidad),
+
+                        precio:
+                            Number(producto.precio)
+
+                    }));
+
+
+                /*
+                ==============================
+                DATOS PARA EL BACKEND
+                ==============================
+                */
+
+                const datosPedido = {
+
+                    nombre_cliente:
+                    nombre,
+
+                    apellido_cliente:
+                        `${apellido} ${segundoApellido}`.trim(),
+
+                    correo:
+                    correo,
+
+                    telefono:
+                    telefono,
+
+                    direccion:
+                    direccion,
+
+                    products:
+                    products,
+
+                    total:
+                    total,
+
+                    order_number:
+                    numeroPedido
 
                 };
 
 
-                const pedido = {
+                /*
+                ==============================
+                DESACTIVAR BOTÓN
+                ==============================
+                */
 
-                    numeroPedido:
-                        "BOX-" +
-                        Date.now(),
+                const boton =
+                    event.submitter;
 
-                    fecha:
-                        new Date().toISOString(),
+                if (boton) {
 
-                    cliente:
-                    cliente,
+                    boton.disabled = true;
 
-                    productos:
-                    carrito
+                    boton.textContent =
+                        "Guardando pedido...";
 
-                };
-
-
-                localStorage.setItem(
-                    "ultimoPedido",
-                    JSON.stringify(pedido)
-                );
+                }
 
 
-                document
-                    .getElementById(
-                        "numeroPedido"
-                    )
-                    .textContent =
-                    pedido.numeroPedido;
+                try {
+
+                    console.log(
+                        "Enviando pedido:",
+                        datosPedido
+                    );
 
 
-                document
-                    .getElementById(
-                        "formulario"
-                    )
-                    .classList.remove(
-                    "activo"
-                );
+                    /*
+                    ==============================
+                    ENVIAR A EXPRESS
+                    ==============================
+                    */
+
+                    const respuesta =
+                        await fetch(
+                            "/api/orders/guardar",
+                            {
+
+                                method:
+                                    "POST",
+
+                                headers: {
+
+                                    "Content-Type":
+                                        "application/json"
+
+                                },
+
+                                body:
+                                    JSON.stringify(
+                                        datosPedido
+                                    )
+
+                            }
+                        );
 
 
-                document
-                    .getElementById(
-                        "carrito"
-                    )
-                    .classList.remove(
-                    "activo"
-                );
+                    const resultado =
+                        await respuesta.json();
 
 
-                document
-                    .getElementById(
-                        "confirmacion"
-                    )
-                    .classList.add(
-                    "activo"
-                );
+                    console.log(
+                        "Respuesta del servidor:",
+                        resultado
+                    );
 
 
-                document
-                    .getElementById(
-                        "confirmacion"
-                    )
-                    .scrollIntoView({
-                        behavior: "smooth"
-                    });
+                    /*
+                    ==============================
+                    COMPROBAR RESPUESTA
+                    ==============================
+                    */
+
+                    if (
+                        !respuesta.ok ||
+                        !resultado.success
+                    ) {
+
+                        throw new Error(
+                            resultado.error ||
+                            resultado.message ||
+                            "No se pudo guardar el pedido"
+                        );
+
+                    }
 
 
-                carrito = [];
+                    /*
+                    ==============================
+                    CREAR PEDIDO LOCAL
+                    ==============================
+                    */
+
+                    const pedido = {
+
+                        numeroPedido:
+                        resultado.data.orderNumber,
+
+                        id:
+                        resultado.data.orderId,
+
+                        fecha:
+                            new Date().toISOString(),
+
+                        cliente: {
+
+                            nombre:
+                            nombre,
+
+                            apellido:
+                            apellido,
+
+                            segundoApellido:
+                            segundoApellido,
+
+                            correo:
+                            correo,
+
+                            telefono:
+                            telefono,
+
+                            direccion:
+                            direccion
+
+                        },
+
+                        productos:
+                        carrito,
+
+                        total:
+                        total
+
+                    };
 
 
-                guardarCarrito();
+                    /*
+                    ==============================
+                    GUARDAR COPIA LOCAL
+                    ==============================
+                    */
 
-                actualizarCarrito();
+                    localStorage.setItem(
+                        "ultimoPedido",
+                        JSON.stringify(
+                            pedido
+                        )
+                    );
 
 
-                document
-                    .getElementById(
-                        "formCliente"
-                    )
-                    .reset();
+                    /*
+                    ==============================
+                    MOSTRAR NÚMERO
+                    ==============================
+                    */
+
+                    document
+                        .getElementById(
+                            "numeroPedido"
+                        )
+                        .textContent =
+                        pedido.numeroPedido;
+
+
+                    /*
+                    ==============================
+                    OCULTAR FORMULARIO
+                    ==============================
+                    */
+
+                    document
+                        .getElementById(
+                            "formulario"
+                        )
+                        .classList.remove(
+                        "activo"
+                    );
+
+
+                    document
+                        .getElementById(
+                            "carrito"
+                        )
+                        .classList.remove(
+                        "activo"
+                    );
+
+
+                    /*
+                    ==============================
+                    MOSTRAR CONFIRMACIÓN
+                    ==============================
+                    */
+
+                    document
+                        .getElementById(
+                            "confirmacion"
+                        )
+                        .classList.add(
+                        "activo"
+                    );
+
+
+                    document
+                        .getElementById(
+                            "confirmacion"
+                        )
+                        .scrollIntoView({
+
+                            behavior:
+                                "smooth"
+
+                        });
+
+
+                    /*
+                    ==============================
+                    VACIAR CARRITO
+                    ==============================
+                    */
+
+                    carrito = [];
+
+                    guardarCarrito();
+
+                    actualizarCarrito();
+
+
+                    /*
+                    ==============================
+                    LIMPIAR FORMULARIO
+                    ==============================
+                    */
+
+                    document
+                        .getElementById(
+                            "formCliente"
+                        )
+                        .reset();
+
+
+                    alert(
+                        "✅ Pedido guardado correctamente en la base de datos."
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        "Error al guardar pedido:",
+                        error
+                    );
+
+
+                    alert(
+                        "❌ No se pudo guardar el pedido.\n\n" +
+                        error.message
+                    );
+
+
+                } finally {
+
+                    /*
+                    ==============================
+                    REACTIVAR BOTÓN
+                    ==============================
+                    */
+
+                    if (boton) {
+
+                        boton.disabled =
+                            false;
+
+                        boton.textContent =
+                            "Finalizar pedido";
+
+                    }
+
+                }
 
             }
         );
