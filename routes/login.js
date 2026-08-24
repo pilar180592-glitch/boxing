@@ -1,47 +1,38 @@
 const express = require('express');
+const database = require('../config/database');
+
 const router = express.Router();
-const database = require('../config/database');; // Asegúrate de que esta ruta sea donde está tu conexión a la BD
 
-// Ruta de Login
-router.post('/login', async (req, res) => {
-  const { correo, password } = req.body;
-
-  // Validación básica de campos vacíos
-  if (!correo || !password) {
-    return res.status(400).json({ message: 'Correo y contraseña son obligatorios' });
-  }
-
+router.post('/', async (req, res) => {
   try {
-    // 1. Buscar el usuario en la base de datos por correo
-    // NOTA: Asegúrate de que la tabla se llame 'usuarios' y la columna 'correo'
-    const [usuarios] = await db.query('SELECT * FROM usuarios WHERE correo = ?', [correo]);
+    const { email, password, nombre } = req.body;
 
-    // 2. Asignar a una variable con nombre ÚNICO (Aquí estaba el error antes)
-    const usuarioEncontrado = usuarios[0];
+    // Buscamos por email O por nombre de usuario
+    const search = email || nombre;
+    if (!search || !password) return res.status(400).json({ error: 'Faltan datos' });
 
-    // 3. Validar si el usuario existe
-    if (!usuarioEncontrado) {
-      return res.status(401).json({ message: 'Usuario no encontrado' });
-    }
+    // ✅ SIN CORCHETES
+    const usuarios = await database.query(
+        'SELECT * FROM usuarios WHERE email = ? OR nombre = ?',
+        [search, search]
+    );
 
-    // 4. Comparar contraseña (Si usas bcrypt, cambia esto por bcrypt.compareSync)
-    if (usuarioEncontrado.password !== password) {
-      return res.status(401).json({ message: 'Contraseña incorrecta' });
-    }
+    const usuario = usuarios[0];
 
-    // 5. Login exitoso
+    if (!usuario) return res.status(401).json({ error: 'Credenciales inválidas' });
+
+    // Tu base de datos guarda la contraseña '12345' en texto plano (password_hash)
+    const passValida = (password === usuario.password_hash);
+
+    if (!passValida) return res.status(401).json({ error: 'Credenciales inválidas' });
+
     res.json({
+      success: true,
       message: 'Login exitoso',
-      usuario: {
-        id: usuarioEncontrado.id,
-        nombre: usuarioEncontrado.nombre_cliente, // Ajusta según tu tabla
-        correo: usuarioEncontrado.correo
-      }
+      usuario: { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol }
     });
-
   } catch (error) {
-    console.error('Error en el login:', error);
-    res.status(500).json({ message: 'Error del servidor' });
+    res.status(500).json({ error: error.message });
   }
 });
 
